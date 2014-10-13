@@ -186,8 +186,8 @@ public class SearchActivity extends Activity {
 
         @Override
         public void onPreExecute(){
-            m_list_view.setVisibility(View.VISIBLE);
-            m_progress_bar.setVisibility(View.INVISIBLE);
+            m_list_view.setVisibility(View.INVISIBLE);
+            m_progress_bar.setVisibility(View.VISIBLE);
         }
         @Override
         protected String doInBackground(Integer... params) {
@@ -197,8 +197,8 @@ public class SearchActivity extends Activity {
 
         @Override
         protected void onPostExecute(String lyrics) {
-            m_list_view.setVisibility(View.INVISIBLE);
-            m_progress_bar.setVisibility(View.VISIBLE);
+            m_list_view.setVisibility(View.VISIBLE);
+            m_progress_bar.setVisibility(View.INVISIBLE);
             Intent i = new Intent(SearchActivity.this, LyricsActivity.class);
             i.putExtra(EXTRA_LYRICS, lyrics);
             startActivity(i);
