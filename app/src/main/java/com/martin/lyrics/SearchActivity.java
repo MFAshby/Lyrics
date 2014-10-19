@@ -12,6 +12,8 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.preference.DialogPreference;
+import android.util.AttributeSet;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -33,13 +35,13 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,47 +54,97 @@ import javax.xml.xpath.XPathFactory;
 
 
 public class SearchActivity extends Activity {
+
+    //used to store application state when you rotate the device. See onSaveInstanceState.
     protected static final String SEARCH_RESULT = "com.martin.lyrics.search_results";
+    protected static final String SEARCH_TEXT = "com.martin.lyrics.search_text";
+
+    //Used to pass the song lyrics to the next activity, which will display them.
     protected static final String EXTRA_LYRICS = "com.martin.lyrics.EXTRA_LYRICS";
 
+    //What the user has searched.
+    private String m_search_text;
+
+    //Array of results which are currently displayed.
     private ArrayList<LyricResult> m_results;
+
+    //A class which links the above array, to a ListView on the search screen.
     private ArrayAdapter<LyricResult> m_results_adapter;
-    private ProgressBar m_progress_bar;
+
+    //The ListView which will display all the results on screen.
     private ListView m_list_view;
 
+    //A progress bar, shown when the user searches the internet
+    private ProgressBar m_progress_bar;
+
+    //A local database to store results in
     private SQLiteDatabase m_local_results;
 
+    //A timer, used to detect when the user has stopped typing for a bit.
+    private Timer m_timer;
+    private TimerTask m_typing_timeout;
+
+    /**
+     * This method is called when the activity is first started.
+     * @param savedInstanceState
+     */
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        //set up the content view
         setContentView(R.layout.activity_search);
 
+        //Get a reference to the main list view.
         m_list_view = (ListView) findViewById(R.id.listView);
+
+        //create the adapter for the list view.
         m_results_adapter = new LyricsResultsAdapter(this);
         m_list_view.setAdapter(m_results_adapter);
+
+        //listen to the user clicking/tapping on the list view.
         m_list_view.setOnItemClickListener(new OnListItemClickListener());
 
+        //get a reference to the progress bar and hide it. We'll show it when needed.
         m_progress_bar = (ProgressBar)findViewById(R.id.progressBar);
         m_progress_bar.setVisibility(View.INVISIBLE);
 
+        //open up the database for stored results.
         m_local_results = new LyricsDatabase(this).getWritableDatabase();
 
+        m_timer = new Timer();
+        m_typing_timeout = null;
+
         if (savedInstanceState != null) {
+            //If we are restoring the application, e.g. after the user has rotated their device,
+            //then remember what results we were showing at the time, and what they seached for.
             m_results = savedInstanceState.getParcelableArrayList(SEARCH_RESULT);
             m_results_adapter.clear();
             m_results_adapter.addAll(m_results);
             m_results_adapter.notifyDataSetChanged();
-        }
 
-        //search locally stored results initially
-        new LyricSearcher(new LocalLyricsAdapter()).execute("");
+            m_search_text = savedInstanceState.getString(SEARCH_TEXT);
+        } else {
+            m_search_text = null;
+            //search locally stored results when the user first opens the app.
+            new LyricSearcher(new LocalLyricsAdapter()).execute("");
+        }
     }
 
+    /**
+     * This is called to create the options menu, which also sets up the action bar at the
+     * top of the screen.
+     */
     @Override public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.my, menu);
 
         //set up the search view
-        SearchView m_search_view = (SearchView) menu.findItem(R.id.action_search).getActionView();
+        MenuItem item = menu.findItem(R.id.action_search);
+        SearchView m_search_view = (SearchView)item.getActionView();
+        if (m_search_text != null) {
+            item.expandActionView();
+            m_search_view.setQuery(m_search_text, false);
+        }
         m_search_view.setOnQueryTextListener(new OnSearchQueryTextListener());
 
         return true;
@@ -104,14 +156,21 @@ public class SearchActivity extends Activity {
         // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
         if (id == R.id.action_settings) {
+            DialogPreference
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
 
+    /**
+     * This is called when the app is put into the background, or when it is rotated. Save the
+     * state of the application here, so it can be restored in onCreate.
+     * @param b the bundle to save things into.
+     */
     @Override public void onSaveInstanceState(Bundle b) {
         super.onSaveInstanceState(b);
         b.putParcelableArrayList(SEARCH_RESULT, m_results);
+        b.putString(SEARCH_TEXT, m_search_text);
     }
 
     /**
@@ -122,11 +181,16 @@ public class SearchActivity extends Activity {
      */
     private static Document getCleanDocument(String urlString, String queryString) {
         try {
+            //make the query string safe to use in a URL
             String encodedSearch = URLEncoder.encode(queryString, "UTF-8");
-            URL url = new URL(urlString + encodedSearch);
-            HttpURLConnection con = (HttpURLConnection) url.openConnection();
 
-            //clean up resulting page and convert to DOM
+            //create the URL
+            URL url = new URL(urlString + encodedSearch);
+
+            //Open up a connection
+            HttpURLConnection con = (HttpURLConnection)url.openConnection();
+
+            //clean up resulting page and convert to DOM, which can be used with XPath.
             TagNode tn = new HtmlCleaner().clean(con.getInputStream());
             return new DomSerializer(new CleanerProperties()).createDOM(tn);
         } catch (MalformedURLException e) {
@@ -141,7 +205,7 @@ public class SearchActivity extends Activity {
 
     /**
      * Used by the search bar when the text changes. Search the intenet on submit..
-     * and search locals only on text change.
+     * and search local results if the user stops typing for a second.
      */
     private class OnSearchQueryTextListener implements SearchView.OnQueryTextListener {
 
@@ -153,9 +217,35 @@ public class SearchActivity extends Activity {
         }
 
         @Override public boolean onQueryTextChange(String newText) {
-            //search locally stored results
-            new LyricSearcher(new LocalLyricsAdapter()).execute(newText);
+            //store the text
+            m_search_text = newText;
+
+            //bump the timer, so that if the user stops typing for a second we'll search local results.
+            if (m_typing_timeout != null) {
+                //cancel the old task first.
+                m_typing_timeout.cancel();
+            }
+            m_typing_timeout = new UserStoppedTypingTask();
+            m_timer.purge();
+            m_timer.schedule(m_typing_timeout, 300);
+
             return true;
+        }
+    }
+
+    /**
+     * This will get run if the user ever stops typing for 300 millis.
+     */
+    private class UserStoppedTypingTask extends TimerTask {
+
+        @Override
+        public void run() {
+            //search locally stored results. Must kick this off in the UI thread.
+            runOnUiThread(new Runnable(){
+                public void run() {
+                    new LyricSearcher(new LocalLyricsAdapter()).execute(m_search_text);
+                }
+            });
         }
     }
 
@@ -261,7 +351,7 @@ public class SearchActivity extends Activity {
     }
 
     /**
-     * encapsulates a search result. Just show artist/title for now, use the link to grab them from the net
+     * Represents a search result. Contains a link so you can fetch the lyrics.
      */
     private static class LyricResult implements Parcelable {
         private String artist;
@@ -270,13 +360,17 @@ public class SearchActivity extends Activity {
 
         private LyricSourceAdapter adapter;
 
-        LyricResult(String artist, String title, String link, LyricSourceAdapter adapter) {
+        protected LyricResult(String artist, String title, String link, LyricSourceAdapter adapter) {
             this.artist = artist;
             this.title = title;
             this.link = link;
             this.adapter = adapter;
         }
 
+        /**
+         * All this crap is required for Parcelable interface, which lets you store these things
+         * as data, and pass em around.
+         */
         public static final Parcelable.Creator CREATOR = new Creator() {
 
             @Override
@@ -334,31 +428,32 @@ public class SearchActivity extends Activity {
      */
     private static class LyricsDatabase extends SQLiteOpenHelper {
 
-        public LyricsDatabase(Context context) {
+        protected LyricsDatabase(Context context) {
             super(context, "LyricsDB", null, 2);
         }
 
-        @Override
-        public void onCreate(SQLiteDatabase db) {
+        @Override public void onCreate(SQLiteDatabase db) {
             db.execSQL("CREATE TABLE Lyrics (Artist text, Title text, Lyrics text, DtSaved datetime DEFAULT CURRENT_TIMESTAMP);");
             db.execSQL("CREATE UNIQUE INDEX ix_Lyrics ON Lyrics (Artist, Title);");
         }
 
-        @Override
-        public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
             db.execSQL("DROP TABLE Lyrics;");
             onCreate(db);
         }
     }
 
     /**
-     * Base class for lyrics site.
+     * Represents a source of lyrics, e.g. a website, or a local database.
      */
     private interface LyricSourceAdapter {
         ArrayList<LyricResult> getSearchResults(String query);
         String getLyrics(LyricResult searchResult);
     }
 
+    /**
+     * Class for searching the local database of lyrics.
+     */
     private class LocalLyricsAdapter implements LyricSourceAdapter {
 
         @Override public ArrayList<LyricResult> getSearchResults(String query) {
@@ -383,11 +478,15 @@ public class SearchActivity extends Activity {
         }
     }
 
+    /**
+     * Class for searching azlyrics.com
+     * Scrapes the azlyrics.com website, using XPath selectors.
+     */
     private class AZLyricsAdapter implements LyricSourceAdapter {
 
         @Override public ArrayList<LyricResult> getSearchResults(String query) {
-            //create URL and do the search
             try {
+                //create URL and do the search, use this utility method to get back a valid document..
                 Document doc = getCleanDocument("http://search.azlyrics.com/search.php?q=", query);
 
                 //create searcher for the relevant sections
@@ -401,17 +500,17 @@ public class SearchActivity extends Activity {
                 XPathExpression artistsexpr = xPath.compile(artists);
                 XPathExpression linksexpr = xPath.compile(links);
 
-                //run the base expression to get results
+                //run the base expression to get a Node for each result.
                 NodeList nl = (NodeList) baseexpr.evaluate(doc, XPathConstants.NODESET);
                 ArrayList<LyricResult> al = new ArrayList<LyricResult>(nl.getLength());
                 for (int i = 0; i < nl.getLength(); i++) {
                     Node n = nl.item(i);
+                    //run the sub-expressions on each result to get each part of the search result.
                     LyricResult r = new LyricResult((String)artistsexpr.evaluate(n, XPathConstants.STRING),
                                                     (String)titlesexpr.evaluate(n, XPathConstants.STRING),
                                                     (String)linksexpr.evaluate(n, XPathConstants.STRING),
                                                     this);
                     al.add(r);
-                    Log.d("LyricResult!", r.title + " " + r.link);
                 }
                 return al;
             } catch (XPathExpressionException e) {
@@ -422,7 +521,9 @@ public class SearchActivity extends Activity {
 
         @Override public String getLyrics(LyricResult searchResult) {
             try {
-                Document d = getCleanDocument(searchResult.link, "");
+                //Use the link on the result to get a Document from the web.
+                Document d = getCleanDocument(searchResult.getLink(), "");
+                //azlyrics use a nice comment in their HTML at the start of the lyrics :)
                 XPathExpression expr = XPathFactory.newInstance().newXPath().compile("//div[comment()=' start of lyrics ']");
                 return (String)expr.evaluate(d, XPathConstants.STRING);
             } catch (XPathExpressionException e) {
@@ -432,6 +533,10 @@ public class SearchActivity extends Activity {
         }
     }
 
+    /**
+     * Class for searching lyricsmania.com.
+     * Scrapes the website, using XPath to pull out the relevant info.
+     */
     private static class LyricsManiaAdapter implements LyricSourceAdapter {
         private static final String ROOT_URL = "http://www.lyricsmania.com";
 
@@ -441,6 +546,9 @@ public class SearchActivity extends Activity {
                 XPathExpression expr = XPathFactory.newInstance().newXPath().compile("//div[@class='elenco']/div[@class='col-left']/ul/li/a");
                 NodeList nl = (NodeList)expr.evaluate(d, XPathConstants.NODESET);
                 ArrayList<LyricResult> r = new ArrayList<LyricResult>();
+
+                //annoyingly, this site concatenates the song title - artist like so. Use a regex to
+                //pull out just the artist.
                 Pattern p = Pattern.compile("- (.*)$");
                 for (int i=0; i<nl.getLength(); i++) {
                     Node n = nl.item(i);
