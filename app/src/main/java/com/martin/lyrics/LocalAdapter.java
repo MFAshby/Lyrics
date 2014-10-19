@@ -20,9 +20,14 @@ public class LocalAdapter implements SourceAdapter {
 
     public LocalAdapter(Context cx) {
         //make sure the local database is ready.
+        getDatabase(cx);
+    }
+
+    private static SQLiteDatabase getDatabase(Context cx) {
         if (m_local_results == null) {
             m_local_results = new LyricsDatabase(cx).getWritableDatabase();
         }
+        return m_local_results;
     }
 
     @Override public ArrayList<SearchResult> getSearchResults(String query) {
@@ -46,7 +51,7 @@ public class LocalAdapter implements SourceAdapter {
         return c.getString(c.getColumnIndex("Lyrics"));
     }
 
-    public static void saveLyrics(SearchResult r, String lyrics) {
+    public static void saveLyrics(Context cx, SearchResult r, String lyrics) {
         ContentValues cv = new ContentValues();
         cv.put("Artist", r.getArtist());
         cv.put("Title", r.getTitle());
@@ -54,7 +59,11 @@ public class LocalAdapter implements SourceAdapter {
 
         //store the lyrics in the DB. Replace any existing ones for the same artist (unique index
         //is on artist_title)
-        m_local_results.insertWithOnConflict("Lyrics", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+        getDatabase(cx).insertWithOnConflict("Lyrics", null, cv, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public static void deleteAll(Context cx) {
+        getDatabase(cx).delete("Lyrics", null, null);
     }
 
     /**

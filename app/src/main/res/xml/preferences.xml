@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:mp="http://schemas.android.com/apk/res-auto">
     <ListPreference
         android:key="@string/pref_lyrics_source"
         android:title="Source"
@@ -8,4 +10,7 @@
         android:entries="@array/pref_sources_desc"
         android:entryValues="@array/pref_sources">
     </ListPreference>
+    <com.martin.lyrics.MethodPreference
+        android:title="Delete stored lyrics"
+        mp:onClick="onDeleteStored"/>
 </PreferenceScreen>

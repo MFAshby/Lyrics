@@ -265,7 +265,7 @@ public class SearchActivity extends Activity {
 
             //save them to local storage.
             if (lyrics != null) {
-                LocalAdapter.saveLyrics(result[0], lyrics);
+                LocalAdapter.saveLyrics(SearchActivity.this, result[0], lyrics);
             }
 
             return lyrics;

@@ -1,6 +1,7 @@
 package com.martin.lyrics;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.preference.ListPreference;
@@ -8,6 +9,11 @@ import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
+import android.util.AttributeSet;
+import android.widget.Toast;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * Shows the settings fragment.
@@ -21,6 +27,14 @@ public class SettingsActivity extends Activity {
                 .beginTransaction()
                 .replace(android.R.id.content, new SettingsFragment())
                 .commit();
+    }
+
+    /**
+     * Called via reflection from a MethodPreference
+     */
+    public void onDeleteStored() {
+        LocalAdapter.deleteAll(this);
+        Toast.makeText(this, "All stored lyrics have been deleted", Toast.LENGTH_LONG).show();
     }
 
     public static class SettingsFragment extends PreferenceFragment implements SharedPreferences.OnSharedPreferenceChangeListener {
