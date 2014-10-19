@@ -8,7 +8,7 @@ import android.widget.TextView;
  * Shows the activity_lyrics
  * Created by martin on 12/10/14.
  */
-public class LyricsActivity extends Activity {
+public class ReadActivity extends Activity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

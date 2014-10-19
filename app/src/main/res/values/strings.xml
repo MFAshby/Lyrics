@@ -6,5 +6,7 @@
     <string name="action_settings">Settings</string>
     <string name="action_search">Search</string>
     <string name="placeholder">Placeholder</string>
+    <string name="default_source_value">com.martin.lyrics.AZLyricsAdapter</string>
+    <string name="pref_lyrics_source">pref_lyrics_source</string>
 
 </resources>

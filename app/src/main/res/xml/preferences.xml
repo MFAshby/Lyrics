@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <ListPreference
+        android:key="@string/pref_lyrics_source"
+        android:title="Source"
+        android:defaultValue="@string/default_source_value"
+        android:entries="@array/pref_sources_desc"
+        android:entryValues="@array/pref_sources">
+    </ListPreference>
+</PreferenceScreen>

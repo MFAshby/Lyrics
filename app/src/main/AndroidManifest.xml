@@ -18,7 +18,11 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".LyricsActivity"
+            android:name=".ReadActivity"
+            android:parentActivityName=".SearchActivity">
+        </activity>
+        <activity
+            android:name=".SettingsActivity"
             android:parentActivityName=".SearchActivity">
         </activity>
     </application>
